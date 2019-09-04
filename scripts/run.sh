@@ -1,0 +1,1 @@
+java -jar word2vec.example.jar $@
