@@ -151,6 +151,7 @@ public class Word2VecExample {
     }
 
 
+
     private void train(String sourceFileFolder, String targetArchiveFile) throws IOException {
         logger.debug("=====Starting Word2Vec Training for " + sourceFileFolder + " =====");
         SentenceIterator iter = new FileSentenceIterator((new File(sourceFileFolder)));

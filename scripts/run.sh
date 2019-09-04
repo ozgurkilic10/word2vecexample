@@ -1,1 +1,1 @@
-java -jar word2vec.example.jar $@
+java  -Djava.io.tmpdir=/home/ozgur/tmp -jar word2vec.example-1.0-SNAPSHOT-jar-with-dependencies.jar $@
