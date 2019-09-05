@@ -1,22 +1,30 @@
 package tr.edu.mu.ceng.ir.word2vec;
 
+import org.deeplearning4j.models.embeddings.inmemory.InMemoryLookupTable;
 import org.deeplearning4j.models.embeddings.learning.impl.elements.CBOW;
 import org.deeplearning4j.models.embeddings.learning.impl.elements.SkipGram;
+import org.deeplearning4j.models.embeddings.loader.VectorsConfiguration;
 import org.deeplearning4j.models.embeddings.loader.WordVectorSerializer;
+import org.deeplearning4j.models.word2vec.VocabWord;
 import org.deeplearning4j.models.word2vec.Word2Vec;
+
 import org.deeplearning4j.text.sentenceiterator.FileSentenceIterator;
 import org.deeplearning4j.text.sentenceiterator.SentencePreProcessor;
 
 import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
 
+
 import org.deeplearning4j.text.sentenceiterator.SentenceIterator;
-import org.deeplearning4j.text.tokenization.tokenizer.preprocessor.CommonPreprocessor;
-import org.deeplearning4j.text.tokenization.tokenizerfactory.DefaultTokenizerFactory;
-import org.deeplearning4j.text.tokenization.tokenizerfactory.TokenizerFactory;
+
+
+import org.nd4j.linalg.api.ndarray.INDArray;
+
+import org.nd4j.linalg.factory.Nd4j;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,9 +42,9 @@ public class Word2VecExample {
 
     public Word2VecExample(){
 
-        actionParamsMap.put("train", "file/directory targetzipfile");
+        actionParamsMap.put("train", "file/directory targetmodelfile/folder");
         actionParamsMap.put("load", "sourcezipfile");
-        actionParamsMap.put("retrain", "sourcezipfile file/directory targetzipfile");
+        actionParamsMap.put("retrain", "sourcezipfile file/directory targetmodelfile/folder");
 
         readProperties();
 
@@ -117,7 +125,70 @@ public class Word2VecExample {
 
     }
 
-    private void retrain(String sourceArchiveFile, String sourceFileFolder, String targetArchiveFile) {
+
+    private void loadVectors(String targetFileFolder) throws IOException {
+        logger.debug("=====Starting Reading Vectors  from " + targetFileFolder + " =====");
+        if (properties.getProperty("word2vec.modelCompressed","true").toLowerCase().equals("true")) {
+            vec = WordVectorSerializer.readWord2VecModel(targetFileFolder, true);
+        }else{
+            readUnCompressed(targetFileFolder);
+        }
+        logger.debug("=====Reading Vectors Completed=====");
+
+    }
+
+
+
+    private void train(String sourceFileFolder, String targetArchiveFile) throws IOException {
+        logger.debug("=====Starting Word2Vec Training for " + sourceFileFolder + " =====");
+        SentenceIterator iter = new FileSentenceIterator((new File(sourceFileFolder)));
+
+        //Set preprocessor to lowercase tokens
+        if (properties.getProperty("word2vec.preprocessor","true").toLowerCase().equals("true")) {
+            iter.setPreProcessor(new SentencePreProcessor() { //Preprocess input
+                @Override
+                public String preProcess(String sentence) {
+                    //CommonPreprocessor ile de bu yapilabilir
+                    return sentence.toLowerCase();
+                }
+            });
+        }
+
+        String stopWordFile = (properties.getProperty("word2vec.stopWordFile",null));
+        if (stopWordFile != null){
+            readStopWords(stopWordFile);
+        }
+        logger.debug("Stop words: " + stopWords);
+        vec = new Word2Vec.Builder().stopWords(stopWords).
+                layerSize(Integer.parseInt(properties.getProperty("word2vec.dimension","100"))). //set the dimension of the vector representation
+                windowSize(Integer.parseInt(properties.getProperty("word2vec.window","5"))).
+                iterate(iter).  //iterator for the selected corpus
+     //           tokenizerFactory(tokenizerFactory).
+                minWordFrequency(Integer.parseInt(properties.getProperty("word2vec.minWordFrequency","5"))).
+                elementsLearningAlgorithm(properties.getProperty("word2vec.algorithm","SkipGram").equals("CBOW")
+                    ? new CBOW<>() : new SkipGram<>()).   //SkipGram or CBOW algorithm
+                build();
+
+
+        vec.fit(); //performs training
+        logger.debug("=====Training Completed=====");
+        logger.debug("Vocabulary size: " + vec.getVocab().numWords());
+        logger.debug("# of documents: " + vec.getVocab().totalNumberOfDocs());
+        logger.debug("# of word occurrences: " + vec.getVocab().totalWordOccurrences());
+
+
+        logger.debug("=====Serializing word vectors to " + targetArchiveFile+" =====");
+        if (properties.getProperty("word2vec.modelCompressed","true").toLowerCase().equals("true")) {
+            WordVectorSerializer.writeWord2VecModel(vec, targetArchiveFile);
+        }else {
+            writeUnCompressed(targetArchiveFile);
+        }
+
+        logger.debug("=====Serialization Completed=====");
+
+    }
+
+    private void retrain(String sourceArchiveFile, String sourceFileFolder, String targetArchiveFile) throws IOException {
         loadVectors(sourceArchiveFile);
         logger.debug("=====Starting Word2Vec Retraining for " + sourceFileFolder + " =====");
         logger.debug("Stop words: " + vec.getStopWords());
@@ -139,70 +210,25 @@ public class Word2VecExample {
         logger.debug("=====Training Completed=====");
 
         logger.debug("=====Serializing word vectors to "+ targetArchiveFile + " =====");
-        WordVectorSerializer.writeWord2VecModel(vec,targetArchiveFile);
-        logger.debug("=====Serialization Completed=====");
-    }
 
-    private void loadVectors(String archiveFile) {
-        logger.debug("=====Starting Reading Vectors  from " + archiveFile + " =====");
-        vec = WordVectorSerializer.readWord2VecModel(archiveFile,true);
-        logger.debug("=====Reading Vectors Completed=====");
-
-    }
-
-
-
-    private void train(String sourceFileFolder, String targetArchiveFile) throws IOException {
-        logger.debug("=====Starting Word2Vec Training for " + sourceFileFolder + " =====");
-        SentenceIterator iter = new FileSentenceIterator((new File(sourceFileFolder)));
-
-        iter.setPreProcessor(new SentencePreProcessor() { //Preprocess input
-            @Override
-            public String preProcess(String sentence) {
-                return sentence.toLowerCase();
-            }
-        });
-
-        TokenizerFactory tokenizerFactory = new DefaultTokenizerFactory();
-        //to remove punctuation marks, numbers, special characters
-        tokenizerFactory.setTokenPreProcessor(new CommonPreprocessor());
-
-
-        
-        String stopWordFile = (properties.getProperty("word2vec.stopWordFile",null));
-        if (stopWordFile != null){
-            readStopWords(stopWordFile);
+        if (properties.getProperty("word2vec.modelCompressed","true").toLowerCase().equals("true")) {
+            WordVectorSerializer.writeWord2VecModel(vec, targetArchiveFile);
+        }else {
+            writeUnCompressed(targetArchiveFile);
         }
-        logger.debug("Stop words: " + stopWords);
-        vec = new Word2Vec.Builder().stopWords(stopWords).
-                layerSize(Integer.parseInt(properties.getProperty("word2vec.dimension","100"))). //set the dimension of the vector representation
-                windowSize(Integer.parseInt(properties.getProperty("word2vec.window","5"))).
-                iterate(iter).  //iterator for the selected corpus
-     //           tokenizerFactory(tokenizerFactory).
-                elementsLearningAlgorithm(properties.getProperty("word2vec.algorithm","SkipGram").equals("CBOW")
-                    ? new CBOW<>() : new SkipGram<>()).   //SkipGram or CBOW algorithm
-                build();
-
-
-        vec.fit(); //performs training
-        logger.debug("=====Training Completed=====");
-        logger.debug("Vocabulary size: " + vec.getVocab().numWords());
-        logger.debug("# of documents: " + vec.getVocab().totalNumberOfDocs());
-        logger.debug("# of word occurrences: " + vec.getVocab().totalWordOccurrences());
-
-
-        logger.debug("=====Serializing word vectors to " + targetArchiveFile+" =====");
-        WordVectorSerializer.writeWord2VecModel(vec,targetArchiveFile);
         logger.debug("=====Serialization Completed=====");
 
+
     }
+
+
 
     private void readStopWords(String stopWordFile) throws IOException {
 
         try (BufferedReader br = new BufferedReader(new FileReader(stopWordFile))) {
             String line;
             while ((line = br.readLine()) != null) {
-                String[] values = line.split(",");
+                String[] values = line.replaceAll(" ","").split(",");
                 stopWords.addAll(Arrays.asList(values));
             }
         }
@@ -236,5 +262,167 @@ public class Word2VecExample {
             }
 
     }
+
+    public void writeUnCompressed(String targetFolder) throws IOException {
+        Path path  = Paths.get(targetFolder);
+        if (!Files.exists(path))
+            Files.createDirectory(path);
+        WordVectorSerializer.writeWordVectors(vec.lookupTable(), new File(targetFolder+"/syn0.txt"));
+
+        // writing out syn1
+        INDArray syn1 = ((InMemoryLookupTable<VocabWord>) vec.getLookupTable()).getSyn1();
+
+        if (syn1 != null)
+            try (PrintWriter writer = new PrintWriter(new FileWriter( new File(targetFolder+"/syn1.txt")))) {
+                for (int x = 0; x < syn1.rows(); x++) {
+                    INDArray row = syn1.getRow(x);
+                    StringBuilder builder = new StringBuilder();
+                    for (int i = 0; i < row.length(); i++) {
+                        builder.append(row.getDouble(i)).append(" ");
+                    }
+                    writer.println(builder.toString().trim());
+                }
+            }
+
+        // writing out syn1
+        INDArray syn1Neg = ((InMemoryLookupTable<VocabWord>) vec.getLookupTable()).getSyn1Neg();
+
+        if (syn1Neg != null)
+            try (PrintWriter writer = new PrintWriter(new FileWriter( new File(targetFolder+"/syn1Neg.txt")))) {
+                for (int x = 0; x < syn1Neg.rows(); x++) {
+                    INDArray row = syn1Neg.getRow(x);
+                    StringBuilder builder = new StringBuilder();
+                    for (int i = 0; i < row.length(); i++) {
+                        builder.append(row.getDouble(i)).append(" ");
+                    }
+                    writer.println(builder.toString().trim());
+                }
+            }
+
+        // writing out huffman codes
+        try (PrintWriter writer = new PrintWriter(new FileWriter(new File(targetFolder+"/codes.txt")))) {
+            for (int i = 0; i < vec.getVocab().numWords(); i++) {
+                VocabWord word = vec.getVocab().elementAtIndex(i);
+                StringBuilder builder = new StringBuilder(WordVectorSerializer.encodeB64(word.getLabel())).append(" ");
+                for (int code : word.getCodes()) {
+                    builder.append(code).append(" ");
+                }
+
+                writer.println(builder.toString().trim());
+            }
+        }
+
+
+        // writing out huffman tree
+        try (PrintWriter writer = new PrintWriter(new File(targetFolder+"/huffman.txt"))) {
+            for (int i = 0; i < vec.getVocab().numWords(); i++) {
+                VocabWord word = vec.getVocab().elementAtIndex(i);
+                StringBuilder builder = new StringBuilder(WordVectorSerializer.encodeB64(word.getLabel())).append(" ");
+                for (int point : word.getPoints()) {
+                    builder.append(point).append(" ");
+                }
+
+                writer.println(builder.toString().trim());
+            }
+        }
+
+        // writing out word frequencies
+        try (PrintWriter writer = new PrintWriter(new File(targetFolder+"/frequencies.txt"))) {
+            for (int i = 0; i < vec.getVocab().numWords(); i++) {
+                VocabWord word = vec.getVocab().elementAtIndex(i);
+                StringBuilder builder = new StringBuilder(WordVectorSerializer.encodeB64(word.getLabel())).append(" ")
+                        .append(word.getElementFrequency()).append(" ")
+                        .append(vec.getVocab().docAppearedIn(word.getLabel()));
+
+                writer.println(builder.toString().trim());
+            }
+        }
+
+
+        try (FileOutputStream writer = new FileOutputStream((targetFolder+"/config.json"))){
+            writer.write(vec.getConfiguration().toJson().getBytes(StandardCharsets.UTF_8));
+        }
+    }
+
+    private void readUnCompressed(String targetFileFolder) throws IOException {
+        logger.debug("Trying full model restoration...");
+
+
+        File fileSyn0 = new File(targetFileFolder+"/syn0.txt");
+        File fileSyn1 = new File(targetFileFolder+"/syn1.txt");
+        File fileCodes = new File(targetFileFolder+"/codes.txt");
+        File fileHuffman = new File(targetFileFolder+"/huffman.txt");
+        File fileFreq = new File(targetFileFolder+"/frequencies.txt");
+
+
+        int originalFreq = Nd4j.getMemoryManager().getOccasionalGcFrequency();
+        boolean originalPeriodic = Nd4j.getMemoryManager().isPeriodicGcActive();
+
+        if (originalPeriodic)
+            Nd4j.getMemoryManager().togglePeriodicGc(false);
+
+        Nd4j.getMemoryManager().setOccasionalGcFrequency(50000);
+
+        try {
+            InputStream stream = new FileInputStream(targetFileFolder+"/config.json");
+            StringBuilder builder = new StringBuilder();
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    builder.append(line);
+                }
+            }
+
+            VectorsConfiguration configuration = VectorsConfiguration.fromJson(builder.toString().trim());
+
+            // we read first 4 files as w2v model
+            vec = WordVectorSerializer.readWord2VecFromText(fileSyn0, fileSyn1, fileCodes, fileHuffman, configuration);
+
+            if (fileFreq.exists()) {
+                // we read frequencies from frequencies.txt, however it's possible that we might not have this file
+                stream = new FileInputStream(fileFreq);
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        String[] split = line.split(" ");
+                        VocabWord word = vec.getVocab().tokenFor(WordVectorSerializer.decodeB64(split[0]));
+                        word.setElementFrequency((long) Double.parseDouble(split[1]));
+                        word.setSequencesCount((long) Double.parseDouble(split[2]));
+                    }
+                }
+
+            }
+            if (fileSyn1.exists()) {
+                stream = new FileInputStream(fileSyn1);
+
+                try (InputStreamReader isr = new InputStreamReader(stream);
+                     BufferedReader reader = new BufferedReader(isr)) {
+                    String line = null;
+                    List<INDArray> rows = new ArrayList<>();
+                    while ((line = reader.readLine()) != null) {
+                        String[] split = line.split(" ");
+                        double array[] = new double[split.length];
+                        for (int i = 0; i < split.length; i++) {
+                            array[i] = Double.parseDouble(split[i]);
+                        }
+                        rows.add(Nd4j.create(array));
+                    }
+
+                    // it's possible to have full model without syn1Neg
+                    if (!rows.isEmpty()) {
+                        INDArray syn1Neg = Nd4j.vstack(rows);
+                        ((InMemoryLookupTable) vec.getLookupTable()).setSyn1Neg(syn1Neg);
+                    }
+                }
+
+            }
+
+        } finally {
+            if (originalPeriodic)
+                Nd4j.getMemoryManager().togglePeriodicGc(true);
+            Nd4j.getMemoryManager().setOccasionalGcFrequency(originalFreq);
+        }
+    }
+
 
 }
