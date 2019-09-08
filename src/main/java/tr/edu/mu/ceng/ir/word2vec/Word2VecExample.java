@@ -22,6 +22,8 @@ import java.util.*;
 import org.deeplearning4j.text.sentenceiterator.SentenceIterator;
 
 
+import org.deeplearning4j.text.tokenization.tokenizer.preprocessor.CommonPreprocessor;
+import org.deeplearning4j.text.tokenization.tokenizerfactory.DefaultTokenizerFactory;
 import org.nd4j.linalg.api.ndarray.INDArray;
 
 import org.nd4j.linalg.factory.Nd4j;
@@ -64,6 +66,10 @@ public class Word2VecExample {
     }
 
     public static void main (String... args) throws IOException {
+
+        logger.debug( "Max Memory = " + Runtime.getRuntime().maxMemory() / 1024 / 1024 + " GB ");
+        logger.debug( "Total Memory = " + Runtime.getRuntime().totalMemory() / 1024 / 1024 + " GB ");
+        logger.debug( "Number of processors = " + Runtime.getRuntime().availableProcessors());
         Word2VecExample wve = new Word2VecExample();
 
 
@@ -159,12 +165,39 @@ public class Word2VecExample {
             readStopWords(stopWordFile);
         }
         logger.debug("Stop words: " + stopWords);
-        vec = new Word2Vec.Builder().stopWords(stopWords).
-                layerSize(Integer.parseInt(properties.getProperty("word2vec.dimension","100"))). //set the dimension of the vector representation
-                windowSize(Integer.parseInt(properties.getProperty("word2vec.window","5"))).
-                iterate(iter).  //iterator for the selected corpus
-     //           tokenizerFactory(tokenizerFactory).
-                minWordFrequency(Integer.parseInt(properties.getProperty("word2vec.minWordFrequency","5"))).
+
+
+        File confFile = new File("config.json");
+        VectorsConfiguration configuration = null;
+        if (confFile.exists()) {
+            InputStream stream = new FileInputStream(confFile);
+            StringBuilder builder = new StringBuilder();
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    builder.append(line);
+                }
+            }
+
+            configuration = VectorsConfiguration.fromJson(builder.toString().trim());
+        }
+        Word2Vec.Builder builder = null;
+        if (configuration != null){
+            builder = new Word2Vec.Builder(configuration);
+            logger.debug("======using confiuration=======");
+            logger.debug(configuration.toJson());
+        }else{
+            builder = new Word2Vec.Builder().
+                    layerSize(Integer.parseInt(properties.getProperty("word2vec.dimension","100"))). //set the dimension of the vector representation
+                    windowSize(Integer.parseInt(properties.getProperty("word2vec.window","5"))).
+                            minWordFrequency(Integer.parseInt(properties.getProperty("word2vec.minWordFrequency","5")));
+
+        }
+
+        DefaultTokenizerFactory tokenizerFactory = new DefaultTokenizerFactory();
+        tokenizerFactory.setTokenPreProcessor(new CommonPreprocessor());
+
+        vec = builder.stopWords(stopWords).iterate(iter).tokenizerFactory(tokenizerFactory).
                 elementsLearningAlgorithm(properties.getProperty("word2vec.algorithm","SkipGram").equals("CBOW")
                     ? new CBOW<>() : new SkipGram<>()).   //SkipGram or CBOW algorithm
                 build();
@@ -176,6 +209,9 @@ public class Word2VecExample {
         logger.debug("# of documents: " + vec.getVocab().totalNumberOfDocs());
         logger.debug("# of word occurrences: " + vec.getVocab().totalWordOccurrences());
 
+        logger.debug( "Max Memory = " + Runtime.getRuntime().maxMemory() / 1024 / 1024 + " GB ");
+        logger.debug( "Total Memory = " + Runtime.getRuntime().totalMemory() / 1024 / 1024 + " GB ");
+        logger.debug( "Free Memory = " + Runtime.getRuntime().freeMemory() / 1024 / 1024 + " GB ");
 
         logger.debug("=====Serializing word vectors to " + targetArchiveFile+" =====");
         if (properties.getProperty("word2vec.modelCompressed","true").toLowerCase().equals("true")) {
