@@ -1,1 +1,1 @@
-java  -Djava.io.tmpdir=/home/ozgur/tmp -jar word2vec.example-1.0-SNAPSHOT-jar-with-dependencies.jar $@
+java -Xmx72g -XX:+UseStringDeduplication -XX:+UseParallelGC -XX:GCTimeRatio=9 -verbose:gc -Xlog:gc* -Djava.io.tmpdir=/home/ozgur/tmp -Dfile.encoding=UTF-8 -server -jar word2vec.example-1.0-SNAPSHOT-jar-with-dependencies.jar $@
