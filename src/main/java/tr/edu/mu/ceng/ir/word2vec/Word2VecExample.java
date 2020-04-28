@@ -116,18 +116,48 @@ public class Word2VecExample {
         if (!str.toLowerCase().equals("y"))
             return;
         while (true){
-            System.out.print("(To quit type q) Enter the word: ");
-            String word = input.nextLine();
-            if (word.toLowerCase().equals("q"))
+            System.out.print("(To quit type q) Enter the positive word(s): ");
+            String[] posWords = input.nextLine().split("\\s");
+            if (posWords[0].toLowerCase().equals("q"))
                 break;
+
+            System.out.println("WordVectorsMean = " +  wve.vec.getWordVectorsMean(Arrays.asList(posWords)));
+
+            System.out.print("Enter the negative word(s): ");
+            String[] negWords = input.nextLine().split("\\s");
+
+            if (! (negWords.length==0 || negWords[0].trim().length()==0)){
+                System.out.println("WordVectorsMean = " + wve.vec.getWordVectorsMean(Arrays.asList(negWords)));
+            }
             System.out.print("number of closest words: ");
             int n = input.nextInt();
             input.nextLine();
-            System.out.println( "Frequency of " + word + " is " + wve.vec.getVocab().wordFrequency(word));
-            Collection<String> lst = wve.vec.wordsNearest(word,n);  //get the closest n words for given word
-            System.out.println("closest " + n + " words for " + word + " are " + lst);
+
+            if ((posWords.length==1) && ((negWords.length==0) || negWords[0].trim().length()==0)) {
+                String word = posWords[0];
+                System.out.println("Frequency of " + word + " is " + wve.vec.getVocab().wordFrequency(word));
+                Collection<String> lst = wve.vec.wordsNearest(word, n);  //get the closest n words for given word
+                System.out.println("closest " + n + " words for " + word + " are:");
+                //print closest words with frequencies
+                for (String closest : lst){
+                    System.out.println(closest + " freq: " + wve.vec.getVocab().wordFrequency(closest));
+                }
+            }else{
+                //print frequencies
+                for (String word : posWords){
+                    System.out.println("Frequency of " + word + " is " + wve.vec.getVocab().wordFrequency(word));
+                }
+                for (String word : negWords){
+                    System.out.println("Frequency of " + word + " is " + wve.vec.getVocab().wordFrequency(word));
+                }
+
+                Collection<String> lst = wve.vec.wordsNearest(Arrays.asList(posWords),Arrays.asList(negWords), n);
+                System.out.println("closest words are " + lst);
+            }
 
         }
+
+
 
     }
 
