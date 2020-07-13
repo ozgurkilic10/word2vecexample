@@ -121,8 +121,11 @@ public class Word2VecExample {
             if (posWords[0].toLowerCase().equals("q"))
                 break;
 
-            System.out.println("WordVectorsMean = " +  wve.vec.getWordVectorsMean(Arrays.asList(posWords)));
-
+            try {
+                System.out.println("WordVectorsMean = " + wve.vec.getWordVectorsMean(Arrays.asList(posWords)));
+            }catch(Exception e){
+                System.out.println("can not calculate mean");
+            }
             System.out.print("Enter the negative word(s): ");
             String[] negWords = input.nextLine().split("\\s");
 
@@ -163,6 +166,7 @@ public class Word2VecExample {
 
 
     private void loadVectors(String targetFileFolder) throws IOException {
+
         logger.debug("=====Starting Reading Vectors  from " + targetFileFolder + " =====");
         if (properties.getProperty("word2vec.modelCompressed","true").toLowerCase().equals("true")) {
             vec = WordVectorSerializer.readWord2VecModel(targetFileFolder, true);
@@ -369,7 +373,7 @@ public class Word2VecExample {
         try (PrintWriter writer = new PrintWriter(new FileWriter(new File(targetFolder+"/codes.txt")))) {
             for (int i = 0; i < vec.getVocab().numWords(); i++) {
                 VocabWord word = vec.getVocab().elementAtIndex(i);
-                StringBuilder builder = new StringBuilder(WordVectorSerializer.encodeB64(word.getLabel())).append(" ");
+                StringBuilder builder = new StringBuilder(WordVectorSerializer.ReadHelper.encodeB64(word.getLabel())).append(" ");
                 for (int code : word.getCodes()) {
                     builder.append(code).append(" ");
                 }
@@ -383,7 +387,7 @@ public class Word2VecExample {
         try (PrintWriter writer = new PrintWriter(new File(targetFolder+"/huffman.txt"))) {
             for (int i = 0; i < vec.getVocab().numWords(); i++) {
                 VocabWord word = vec.getVocab().elementAtIndex(i);
-                StringBuilder builder = new StringBuilder(WordVectorSerializer.encodeB64(word.getLabel())).append(" ");
+                StringBuilder builder = new StringBuilder(WordVectorSerializer.ReadHelper.encodeB64(word.getLabel())).append(" ");
                 for (int point : word.getPoints()) {
                     builder.append(point).append(" ");
                 }
@@ -396,7 +400,7 @@ public class Word2VecExample {
         try (PrintWriter writer = new PrintWriter(new File(targetFolder+"/frequencies.txt"))) {
             for (int i = 0; i < vec.getVocab().numWords(); i++) {
                 VocabWord word = vec.getVocab().elementAtIndex(i);
-                StringBuilder builder = new StringBuilder(WordVectorSerializer.encodeB64(word.getLabel())).append(" ")
+                StringBuilder builder = new StringBuilder(WordVectorSerializer.ReadHelper.encodeB64(word.getLabel())).append(" ")
                         .append(word.getElementFrequency()).append(" ")
                         .append(vec.getVocab().docAppearedIn(word.getLabel()));
 
@@ -451,7 +455,7 @@ public class Word2VecExample {
                     String line;
                     while ((line = reader.readLine()) != null) {
                         String[] split = line.split(" ");
-                        VocabWord word = vec.getVocab().tokenFor(WordVectorSerializer.decodeB64(split[0]));
+                        VocabWord word = vec.getVocab().tokenFor(WordVectorSerializer.ReadHelper.decodeB64(split[0]));
                         word.setElementFrequency((long) Double.parseDouble(split[1]));
                         word.setSequencesCount((long) Double.parseDouble(split[2]));
                     }
